@@ -1,0 +1,26 @@
+# Documentation is private by default; the root README is public.
+*.[mM][dD]
+!/README.md
+.ai/
+.agents/
+.codex/
+.claude/
+.prompts/
+
+# Python and local configuration
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+build/
+dist/
+.env
+.env.*
+.DS_Store
+
+# Generated research artifacts
+/data/
