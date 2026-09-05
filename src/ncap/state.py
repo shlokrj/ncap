@@ -34,3 +34,21 @@ def rgba_to_state(rgba: Tensor, channels: int = 16) -> Tensor:
         raise ValueError("input must have four channels; output must have at least four")
     hidden = rgba.new_zeros(rgba.shape[0], channels - 4, *rgba.shape[2:])
     return torch.cat((rgba, hidden), dim=1)
+
+
+def load_target(path, size: int = 64, padding: int = 8) -> Tensor:
+    """Fit RGBA inside a square grid, preserving aspect ratio; return premultiplied RGBA."""
+    from PIL import Image, ImageOps
+
+    if padding < 0 or size <= 2 * padding:
+        raise ValueError("size must exceed twice the nonnegative padding")
+    with Image.open(path) as source:
+        rgba = ImageOps.exif_transpose(source).convert("RGBA")
+        # Resize in premultiplied space to avoid colors leaking from transparent pixels.
+        fitted = ImageOps.contain(rgba.convert("RGBa"), (size - 2 * padding,) * 2,
+                                  Image.Resampling.LANCZOS).convert("RGBA")
+    canvas = Image.new("RGBA", (size, size))
+    canvas.paste(fitted, ((size - fitted.width) // 2, (size - fitted.height) // 2))
+    tensor = torch.frombuffer(bytearray(canvas.tobytes()), dtype=torch.uint8).float().reshape(size, size, 4)
+    tensor = tensor.permute(2, 0, 1).unsqueeze(0) / 255
+    return torch.cat((tensor[:, :3] * tensor[:, 3:4], tensor[:, 3:4]), dim=1)
