@@ -1,0 +1,17 @@
+{
+  "channels": 16,
+  "hidden_size": 32,
+  "fire_rate": 0.5,
+  "size": 24,
+  "padding": 4,
+  "batch_size": 4,
+  "iterations": 1000,
+  "min_steps": 24,
+  "max_steps": 40,
+  "learning_rate": 0.002,
+  "seed": 0,
+  "eval_seed": 10000,
+  "eval_steps": 40,
+  "threads": 1,
+  "pool_size": 128
+}

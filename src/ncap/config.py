@@ -1,4 +1,4 @@
-"""Serializable settings for seed-only training."""
+"""Serializable settings for seed and state-pool training."""
 
 from dataclasses import dataclass
 import math
@@ -20,11 +20,12 @@ class TrainConfig:
     eval_seed: int = 10000
     eval_steps: int = 96
     threads: int = 1
+    pool_size: int = 0
 
     def __post_init__(self):
         integer_fields = ('channels', 'hidden_size', 'size', 'padding', 'batch_size',
                           'iterations', 'min_steps', 'max_steps', 'seed', 'eval_seed',
-                          'eval_steps', 'threads')
+                          'eval_steps', 'threads', 'pool_size')
         for name in integer_fields:
             value = getattr(self, name)
             if type(value) is not int or value < 0:
@@ -32,6 +33,8 @@ class TrainConfig:
         if min(self.hidden_size, self.batch_size, self.iterations, self.min_steps,
                self.eval_steps, self.threads) < 1 or self.channels < 4:
             raise ValueError('training dimensions and step counts must be positive; channels >= 4')
+        if self.pool_size and self.pool_size < self.batch_size:
+            raise ValueError('pool_size must be zero or at least batch_size')
         if self.size <= 2 * self.padding or self.max_steps < self.min_steps:
             raise ValueError('invalid target padding or rollout interval')
         if not 0 <= self.fire_rate <= 1 or not math.isfinite(self.learning_rate) or self.learning_rate <= 0:

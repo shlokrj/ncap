@@ -52,3 +52,15 @@ def simulate_main():
     except BaseException as exc:
         write_json(args.output / 'status.json', {'status': 'failed', 'error': str(exc)})
         raise
+
+
+def evaluate_main():
+    from .evaluate import evaluate
+    parser = argparse.ArgumentParser(description='Measure continuous multi-seed growth and persistence.')
+    parser.add_argument('--checkpoint', required=True, type=Path)
+    parser.add_argument('--target', required=True, type=Path)
+    parser.add_argument('--output', required=True, type=Path)
+    parser.add_argument('--horizons', nargs='+', type=int, default=[64, 96, 192, 384])
+    parser.add_argument('--seeds', nargs='+', type=int, default=[10000, 10001, 10002])
+    args = parser.parse_args()
+    print(json.dumps(evaluate(args.checkpoint, args.target, args.output, args.horizons, args.seeds), indent=2))

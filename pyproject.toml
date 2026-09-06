@@ -12,6 +12,7 @@ dependencies = ["torch>=2.2,<3", "pillow>=10,<13"]
 [project.scripts]
 ncap-train = "ncap.cli:train_main"
 ncap-simulate = "ncap.cli:simulate_main"
+ncap-evaluate = "ncap.cli:evaluate_main"
 
 [project.optional-dependencies]
 dev = ["pytest>=8,<10"]

@@ -1,4 +1,4 @@
-"""Seed-only training with immutable run folders and auditable artifacts."""
+"""Seed or state-pool training with immutable run folders and auditable artifacts."""
 
 import csv
 from dataclasses import asdict
@@ -15,6 +15,7 @@ import torch
 
 from .config import TrainConfig
 from .losses import image_loss
+from .pool import StatePool
 from .model import NeuralCellularAutomata
 from .simulate import export_rollout
 from .state import create_seed, load_target
@@ -69,6 +70,8 @@ def train(target_path, output, config: TrainConfig):
         })
         render_state(target).save(output / 'target.png')
         seed = create_seed(config.batch_size, config.channels, config.size, config.size)
+        pool = StatePool(seed[:1], config.pool_size) if config.pool_size else None
+        pool_generator = torch.Generator().manual_seed(config.seed)
         started = time.monotonic()
         with (output / 'loss.csv').open('w', newline='') as stream:
             writer = csv.writer(stream)
@@ -76,19 +79,27 @@ def train(target_path, output, config: TrainConfig):
             for iteration in range(1, config.iterations + 1):
                 steps = rng.randint(config.min_steps, config.max_steps)
                 optimizer.zero_grad(set_to_none=True)
-                state = model.rollout(seed, steps, generator=generator)
+                if pool is not None:
+                    indices, batch = pool.sample(config.batch_size, target, generator=pool_generator)
+                else:
+                    batch = seed
+                state = model.rollout(batch, steps, generator=generator)
                 loss = image_loss(state, target)
                 if not torch.isfinite(loss):
                     raise FloatingPointError('nonfinite training loss')
                 loss.backward()
                 torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0, error_if_nonfinite=True)
                 optimizer.step()
+                if pool is not None:
+                    pool.commit(indices, state)
                 writer.writerow([iteration, steps, loss.item()])
                 stream.flush()
                 if iteration == 1 or iteration % 100 == 0 or iteration == config.iterations:
                     print(f'iteration {iteration}/{config.iterations}: loss={loss.item():.6f}', flush=True)
         torch.save({'format_version': 1, 'config': asdict(config), 'model': model.state_dict(),
                     'optimizer': optimizer.state_dict(), 'iteration': config.iterations,
+                    'pool': pool.states if pool is not None else None,
+                    'pool_generator_state': pool_generator.get_state(),
                     'generator_state': generator.get_state(), 'python_rng_state': rng.getstate()},
                    output / 'checkpoint.pt')
         model.eval()
