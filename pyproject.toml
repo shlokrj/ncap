@@ -14,6 +14,8 @@ ncap-train = "ncap.cli:train_main"
 ncap-simulate = "ncap.cli:simulate_main"
 ncap-evaluate = "ncap.cli:evaluate_main"
 
+ncap-recovery = "ncap.cli:recovery_main"
+
 [project.optional-dependencies]
 dev = ["pytest>=8,<10"]
 

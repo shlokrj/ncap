@@ -13,6 +13,7 @@ import time
 from PIL import __version__ as pillow_version
 import torch
 
+from .damage import cell_dropout
 from .config import TrainConfig
 from .losses import image_loss
 from .pool import StatePool
@@ -72,6 +73,7 @@ def train(target_path, output, config: TrainConfig):
         seed = create_seed(config.batch_size, config.channels, config.size, config.size)
         pool = StatePool(seed[:1], config.pool_size) if config.pool_size else None
         pool_generator = torch.Generator().manual_seed(config.seed)
+        damage_generator = torch.Generator().manual_seed(config.seed)
         started = time.monotonic()
         with (output / 'loss.csv').open('w', newline='') as stream:
             writer = csv.writer(stream)
@@ -83,6 +85,14 @@ def train(target_path, output, config: TrainConfig):
                     indices, batch = pool.sample(config.batch_size, target, generator=pool_generator)
                 else:
                     batch = seed
+                if config.damage_probability:
+                    # Keep freshly injected seeds intact; damage only previously grown states.
+                    eligible = (batch != seed[:1]).flatten(1).any(dim=1)
+                    selected = torch.rand(config.batch_size, generator=damage_generator) < config.damage_probability
+                    selected &= eligible
+                    if selected.any():
+                        batch[selected] = cell_dropout(batch[selected], config.damage_fraction,
+                                                       generator=damage_generator)
                 state = model.rollout(batch, steps, generator=generator)
                 loss = image_loss(state, target)
                 if not torch.isfinite(loss):
@@ -100,6 +110,7 @@ def train(target_path, output, config: TrainConfig):
                     'optimizer': optimizer.state_dict(), 'iteration': config.iterations,
                     'pool': pool.states if pool is not None else None,
                     'pool_generator_state': pool_generator.get_state(),
+                    'damage_generator_state': damage_generator.get_state(),
                     'generator_state': generator.get_state(), 'python_rng_state': rng.getstate()},
                    output / 'checkpoint.pt')
         model.eval()

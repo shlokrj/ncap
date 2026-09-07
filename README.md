@@ -4,7 +4,7 @@ Neural Cellular Automata Playground — exploring how a shared local neural rule
 
 ## Status
 
-The PyTorch core, optional state-pool training, and persistence diagnostics are implemented: load an RGBA target, train a shared update rule, save a checkpoint, and export a seeded rollout. Regeneration, controlled experiments, and the playground are next. A small geometric-leaf trial produces recognizable early growth but drifts over longer rollouts. Long-term stability and regeneration have not been demonstrated.
+The PyTorch core, optional state-pool training, and persistence diagnostics are implemented: load an RGBA target, train a shared update rule, save a checkpoint, and export a seeded rollout. Damage training and paired recovery diagnostics are available; broader controlled experiments and the playground are next. A small geometric-leaf trial produces recognizable early growth but drifts over longer rollouts. Long-term stability and general recovery robustness remain unverified.
 
 ## Getting started
 
@@ -87,11 +87,41 @@ Evaluation follows each seeded trajectory continuously through the requested hor
 
 One 1,000-iteration run with `configs/leaf-small.json` produced a recognizable low-resolution leaf. Across evaluation seeds 10000–10002, alpha IoU was 0.797–0.874 at step 40 and fell to 0.613–0.678 at step 320. This is evidence of early growth and later drift on one training seed and one target; it does not establish robustness or a benefit over seed-only training. Run artifacts remain local under ignored `data/`.
 
+## Damage and recovery diagnostics
+
+```sh
+ncap-train --target assets/targets/leaf.png --config configs/regeneration.json \
+  --output data/runs/leaf-regeneration
+ncap-recovery --checkpoint data/runs/leaf-regeneration/checkpoint.pt \
+  --target data/runs/leaf-regeneration/target-source --grow-steps 40 \
+  --recovery-steps 80 --fractions 0 0.1 0.25 0.5 1 \
+  --seeds 20000 20001 20002 --output data/exports/leaf-recovery
+```
+
+`damage_probability` selects previously grown pool samples for damage; freshly injected seeds remain intact. `damage_fraction` removes exactly the rounded fraction of **all grid cells**, including background, and clears RGB, alpha, and hidden state. Damage sampling uses its own saved random generator. Defaults leave damage disabled; enabling it requires a pool. The small regeneration configuration is exploratory.
+
+`ncap.damage` also provides non-mutating circular and rectangular cuts for experiments. Circle centers are `(row, column)` and rectangle coordinates must fit the grid. Training and the recovery command currently use random cell removal only.
+
+Recovery evaluation grows a state, damages it, and advances it beside an undamaged control with identical stochastic update draws. It records pre-damage, immediate post-damage, recovered, and control losses, actual foreground removal, and corresponding PNGs. Zero damage should exactly match the control; complete removal remains dead. Fractions share a random cell ordering within each seed, giving nested damage masks. Outputs preserve target bytes, hashes, settings, source fingerprints, runtime, and failure status in a new directory.
+
+A lower final loss alone does not establish regeneration: compare it with the immediate damaged loss and the undamaged control. This command does not estimate recovery time, thresholded success rate, or held-out generalization.
+
+### Exploratory recovery result
+
+With one training seed and the geometric leaf, after 40 growth updates, 25% random grid-cell removal, and 80 recovery updates, mean visible-channel MSE across evaluation seeds 20000–20002 was:
+
+| Model | Immediately damaged | After recovery | Undamaged control |
+| --- | --- | --- | --- |
+| Growth-only pool | 0.02156 | 0.01093 | 0.00411 |
+| Damage-trained pool | 0.02067 | 0.00386 | 0.00352 |
+
+Both used 1,000 training iterations and otherwise matching small-leaf settings. This limited comparison supports partial recovery in this trial, not general robustness. Complete erasure remained dead. Longer-term drift, additional training seeds, targets, and damage geometries still need evaluation.
+
 ## Next milestones
 
 1. Validate target growth across training seeds and targets.
 2. Evaluate persistence beyond training rollout lengths.
-3. Train and measure recovery after damage.
+3. Compare damage-trained and growth-only models across training seeds and damage geometries.
 4. Run controlled robustness experiments.
 5. Build an interactive playground around validated models.
 

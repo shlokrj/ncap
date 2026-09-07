@@ -21,6 +21,8 @@ class TrainConfig:
     eval_steps: int = 96
     threads: int = 1
     pool_size: int = 0
+    damage_probability: float = 0.0
+    damage_fraction: float = 0.25
 
     def __post_init__(self):
         integer_fields = ('channels', 'hidden_size', 'size', 'padding', 'batch_size',
@@ -33,6 +35,10 @@ class TrainConfig:
         if min(self.hidden_size, self.batch_size, self.iterations, self.min_steps,
                self.eval_steps, self.threads) < 1 or self.channels < 4:
             raise ValueError('training dimensions and step counts must be positive; channels >= 4')
+        if not 0 <= self.damage_probability <= 1 or not 0 <= self.damage_fraction <= 1:
+            raise ValueError('damage probability and fraction must be in [0, 1]')
+        if self.damage_probability and not self.pool_size:
+            raise ValueError('damage training requires a state pool')
         if self.pool_size and self.pool_size < self.batch_size:
             raise ValueError('pool_size must be zero or at least batch_size')
         if self.size <= 2 * self.padding or self.max_steps < self.min_steps:

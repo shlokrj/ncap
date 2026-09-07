@@ -64,3 +64,19 @@ def evaluate_main():
     parser.add_argument('--seeds', nargs='+', type=int, default=[10000, 10001, 10002])
     args = parser.parse_args()
     print(json.dumps(evaluate(args.checkpoint, args.target, args.output, args.horizons, args.seeds), indent=2))
+
+
+def recovery_main():
+    from .recovery import evaluate_recovery
+    parser = argparse.ArgumentParser(description='Compare damaged recovery with matching undamaged rollouts.')
+    parser.add_argument('--checkpoint', required=True, type=Path)
+    parser.add_argument('--target', required=True, type=Path)
+    parser.add_argument('--output', required=True, type=Path)
+    parser.add_argument('--grow-steps', type=int, default=96)
+    parser.add_argument('--recovery-steps', type=int, default=96)
+    parser.add_argument('--fractions', nargs='+', type=float, default=[0.1, 0.25, 0.5])
+    parser.add_argument('--seeds', nargs='+', type=int, default=[20000, 20001, 20002])
+    args = parser.parse_args()
+    print(json.dumps(evaluate_recovery(args.checkpoint, args.target, args.output,
+                                      grow_steps=args.grow_steps, recovery_steps=args.recovery_steps,
+                                      fractions=args.fractions, seeds=args.seeds), indent=2))
