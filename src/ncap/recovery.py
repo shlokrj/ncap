@@ -6,7 +6,7 @@ from pathlib import Path
 import platform
 import torch
 
-from .damage import cell_dropout
+from .damage import apply_damage, GEOMETRIES
 from .losses import image_loss
 from .simulate import load_checkpoint
 from .state import create_seed, load_target
@@ -16,7 +16,9 @@ from .visualize import render_state
 
 @torch.no_grad()
 def evaluate_recovery(checkpoint, target_path, output, *, grow_steps=96, recovery_steps=96,
-                      fractions=(0.1, 0.25, 0.5), seeds=(20000, 20001, 20002)):
+                      fractions=(0.1, 0.25, 0.5), seeds=(20000, 20001, 20002), geometry='dropout'):
+    if geometry not in GEOMETRIES:
+        raise ValueError('unknown damage geometry')
     fractions, seeds = tuple(fractions), tuple(seeds)
     if any(type(v) is not int or v < 1 for v in (grow_steps, recovery_steps)):
         raise ValueError('growth and recovery steps must be positive integers')
@@ -38,7 +40,7 @@ def evaluate_recovery(checkpoint, target_path, output, *, grow_steps=96, recover
             'checkpoint_sha256': hashlib.sha256(checkpoint_bytes).hexdigest(),
             'target_sha256': hashlib.sha256(target_bytes).hexdigest(),
             'config': config, 'grow_steps': grow_steps, 'recovery_steps': recovery_steps,
-            'fractions': fractions, 'seeds': seeds, 'torch': str(torch.__version__),
+            'fractions': fractions, 'seeds': seeds, 'geometry': geometry, 'torch': str(torch.__version__),
             'python': platform.python_version(), 'device': 'cpu', **git_metadata(),
             'source_sha256': {p.name: hashlib.sha256(p.read_bytes()).hexdigest()
                               for p in sorted(Path(__file__).parent.glob('*.py'))},
@@ -56,7 +58,7 @@ def evaluate_recovery(checkpoint, target_path, output, *, grow_steps=96, recover
             render_state(grown).save(output / f'seed-{seed}-grown.png')
             render_state(control).save(output / f'seed-{seed}-control.png')
             for index, fraction in enumerate(fractions):
-                damaged = cell_dropout(grown, fraction, generator=torch.Generator().manual_seed(seed))
+                damaged = apply_damage(grown, fraction, geometry, generator=torch.Generator().manual_seed(seed))
                 generator.set_state(update_rng)
                 recovered = model.rollout(damaged, recovery_steps, generator=generator)
                 if not torch.isfinite(recovered).all():
@@ -64,7 +66,7 @@ def evaluate_recovery(checkpoint, target_path, output, *, grow_steps=96, recover
                 original_foreground = grown[:, 3:4] > 0.1
                 removed = original_foreground & (damaged[:, 3:4] <= 0.1)
                 count = original_foreground.sum().item()
-                rows.append({'seed': seed, 'fraction': fraction,
+                rows.append({'seed': seed, 'fraction': fraction, 'geometry': geometry,
                              'foreground_removed_fraction': removed.sum().item() / count if count else None,
                              'grown_loss': image_loss(grown, target).item(),
                              'damaged_loss': image_loss(damaged, target).item(),

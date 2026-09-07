@@ -68,10 +68,12 @@ def evaluate_main():
 
 def recovery_main():
     from .recovery import evaluate_recovery
+    from .damage import GEOMETRIES
     parser = argparse.ArgumentParser(description='Compare damaged recovery with matching undamaged rollouts.')
     parser.add_argument('--checkpoint', required=True, type=Path)
     parser.add_argument('--target', required=True, type=Path)
     parser.add_argument('--output', required=True, type=Path)
+    parser.add_argument('--geometry', choices=GEOMETRIES, default='dropout')
     parser.add_argument('--grow-steps', type=int, default=96)
     parser.add_argument('--recovery-steps', type=int, default=96)
     parser.add_argument('--fractions', nargs='+', type=float, default=[0.1, 0.25, 0.5])
@@ -79,4 +81,14 @@ def recovery_main():
     args = parser.parse_args()
     print(json.dumps(evaluate_recovery(args.checkpoint, args.target, args.output,
                                       grow_steps=args.grow_steps, recovery_steps=args.recovery_steps,
-                                      fractions=args.fractions, seeds=args.seeds), indent=2))
+                                      fractions=args.fractions, seeds=args.seeds, geometry=args.geometry), indent=2))
+
+
+def study_main():
+    from .experiments import run_study
+    parser = argparse.ArgumentParser(description='Run a fixed paired multi-seed damage-training study.')
+    parser.add_argument('--target', required=True, type=Path)
+    parser.add_argument('--plan', required=True, type=Path)
+    parser.add_argument('--output', required=True, type=Path)
+    args = parser.parse_args()
+    print(json.dumps(run_study(args.target, args.output, json.loads(args.plan.read_text())), indent=2))

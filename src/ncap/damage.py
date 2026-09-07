@@ -37,3 +37,28 @@ def cell_dropout(state, fraction, *, generator):
         indices = torch.randperm(count, device=state.device, generator=generator)
         row[indices[:round(fraction * count)]] = 0
     return state * keep.reshape(state.shape[0], 1, *state.shape[2:])
+
+
+GEOMETRIES = ('dropout', 'center', 'edge', 'horizontal')
+
+
+def apply_damage(state, fraction, geometry, *, generator):
+    """Remove an exact grid-cell count using a fixed spatial ordering or random dropout."""
+    validate_state(state)
+    if geometry not in GEOMETRIES or not 0 <= fraction <= 1:
+        raise ValueError('unknown geometry or fraction outside [0, 1]')
+    if geometry == 'dropout':
+        return cell_dropout(state, fraction, generator=generator)
+    height, width = state.shape[2:]
+    y, x = torch.meshgrid(torch.arange(height, device=state.device),
+                          torch.arange(width, device=state.device), indexing='ij')
+    if geometry == 'center':
+        distance = (y - (height - 1) / 2).square() + (x - (width - 1) / 2).square()
+    elif geometry == 'edge':
+        distance = x  # Left-to-right cut, with row-major ties.
+    else:
+        distance = (y - (height - 1) / 2).abs()
+    indices = torch.argsort(distance.flatten(), stable=True)
+    keep = torch.ones(height * width, device=state.device, dtype=state.dtype)
+    keep[indices[:round(fraction * height * width)]] = 0
+    return state * keep.reshape(height, width)

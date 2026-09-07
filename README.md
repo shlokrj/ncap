@@ -4,7 +4,7 @@ Neural Cellular Automata Playground — exploring how a shared local neural rule
 
 ## Status
 
-The PyTorch core, optional state-pool training, and persistence diagnostics are implemented: load an RGBA target, train a shared update rule, save a checkpoint, and export a seeded rollout. Damage training and paired recovery diagnostics are available; broader controlled experiments and the playground are next. A small geometric-leaf trial produces recognizable early growth but drifts over longer rollouts. Long-term stability and general recovery robustness remain unverified.
+The PyTorch core, optional state-pool training, and persistence diagnostics are implemented: load an RGBA target, train a shared update rule, save a checkpoint, and export a seeded rollout. Damage training and paired recovery diagnostics are available; a fixed multi-seed recovery study is available; broader experiments and the playground are next. A small geometric-leaf trial produces recognizable early growth but drifts over longer rollouts. Long-term stability and general recovery robustness remain unverified.
 
 ## Getting started
 
@@ -100,7 +100,7 @@ ncap-recovery --checkpoint data/runs/leaf-regeneration/checkpoint.pt \
 
 `damage_probability` selects previously grown pool samples for damage; freshly injected seeds remain intact. `damage_fraction` removes exactly the rounded fraction of **all grid cells**, including background, and clears RGB, alpha, and hidden state. Damage sampling uses its own saved random generator. Defaults leave damage disabled; enabling it requires a pool. The small regeneration configuration is exploratory.
 
-`ncap.damage` also provides non-mutating circular and rectangular cuts for experiments. Circle centers are `(row, column)` and rectangle coordinates must fit the grid. Training and the recovery command currently use random cell removal only.
+`ncap.damage` also provides non-mutating circular and rectangular cuts for experiments. Circle centers are `(row, column)` and rectangle coordinates must fit the grid. Training uses random cell removal. The recovery command also accepts `--geometry center`, `edge`, or `horizontal`.
 
 Recovery evaluation grows a state, damages it, and advances it beside an undamaged control with identical stochastic update draws. It records pre-damage, immediate post-damage, recovered, and control losses, actual foreground removal, and corresponding PNGs. Zero damage should exactly match the control; complete removal remains dead. Fractions share a random cell ordering within each seed, giving nested damage masks. Outputs preserve target bytes, hashes, settings, source fingerprints, runtime, and failure status in a new directory.
 
@@ -116,6 +116,34 @@ With one training seed and the geometric leaf, after 40 growth updates, 25% rand
 | Damage-trained pool | 0.02067 | 0.00386 | 0.00352 |
 
 Both used 1,000 training iterations and otherwise matching small-leaf settings. This limited comparison supports partial recovery in this trial, not general robustness. Complete erasure remained dead. Longer-term drift, additional training seeds, targets, and damage geometries still need evaluation.
+
+## Fixed multi-seed comparison
+
+```sh
+ncap-study --target assets/targets/leaf.png --plan configs/recovery-study.json \
+  --output data/studies/leaf-recovery
+```
+
+The checked-in exploratory plan trains six models: growth-only and damage-trained variants for each of three training seeds. It varies only damage probability within each matched pair. Each model is evaluated on three separate update seeds, four geometries, and grid-removal fractions 0, 0.25, 0.5, and 1. Growth and recovery durations are fixed at 40 and 80 updates. This is a same-target comparison; evaluation seeds are not held-out targets or a final test set.
+
+Every geometry removes exactly `round(fraction × height × width)` cells. Center cuts rank cells by distance from the grid center; edge cuts proceed from the left; horizontal cuts proceed outward from the middle rows. Ties use row-major order, so a cut boundary may contain a partial row or column. Equal grid area does not imply equal damage to the organism: inspect `foreground_removed_fraction` in the detailed rows.
+
+A study saves the original target, fixed plan and hashes, each training run and recovery evaluation, all observations in `rows.json`, and `summary.json`. Evaluation seeds are averaged within each model first. The summary reports each matched training-seed pair, mean damage-trained minus growth-only loss, and the sample standard deviation of those paired differences. Negative differences favor damage training. It does not treat repeated evaluations of one trained model as independent training replicates or report confidence intervals from three seeds.
+
+Existing directories are rejected. Failed studies retain their plan, completed models, available rows, and failure status; automatic resume and model selection are not implemented. The remaining planned channel-count, update-rate, and long-term persistence sweeps are separate experiments.
+
+### Three-training-seed result
+
+The fixed leaf study completed six trained models and 288 observations. At 25% **grid-cell** removal, mean recovery MSE (evaluation seeds averaged within each model) was:
+
+| Geometry | Growth-only | Damage-trained | SD of paired differences |
+| --- | --- | --- | --- |
+| Random removal | 0.00792 | 0.00369 | 0.00412 |
+| Center | 0.06523 | 0.06344 | 0.00158 |
+| Left edge | 0.00397 | 0.00352 | 0.00053 |
+| Horizontal | 0.06296 | 0.01264 | 0.06110 |
+
+Random-removal loss improved in all three training-seed pairs. Center cuts remained poor; they remove much more of this centered leaf than left-edge cuts at the same grid fraction. Edge-cut differences were mixed across seeds. Horizontal gains varied substantially. These results describe one target and one fixed recovery duration, with only three training seeds; they do not establish long-term stability, statistical significance, or generalization to new targets. The full local results are retained under `data/studies/leaf-recovery-01/`.
 
 ## Next milestones
 
