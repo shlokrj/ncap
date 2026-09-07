@@ -1,8 +1,8 @@
 # ncap
 
-Neural Cellular Automata Playground — a PyTorch project exploring how simple local rules can learn to grow images and recover from damage.
+Neural Cellular Automata Playground. A PyTorch project that learns to grow images and recover from damage.
 
-Currently includes training, simulation, and recovery experiments. The interactive playground is planned. Early leaf experiments show growth and partial recovery; long-term stability remains a work in progress.
+Includes training, simulation, and recovery experiments. The interactive playground is planned. Leaf experiments show early growth and partial recovery. Long-term stability still needs work.
 
 ## Setup
 
