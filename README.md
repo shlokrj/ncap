@@ -1,156 +1,46 @@
 # ncap
 
-Neural Cellular Automata Playground — exploring how a shared local neural rule can learn growth, persistence, and regeneration.
+Neural Cellular Automata Playground — a PyTorch project exploring how simple local rules can learn to grow images and recover from damage.
 
-## Status
+Currently includes training, simulation, and recovery experiments. The interactive playground is planned. Early leaf experiments show growth and partial recovery; long-term stability remains a work in progress.
 
-The PyTorch core, optional state-pool training, and persistence diagnostics are implemented: load an RGBA target, train a shared update rule, save a checkpoint, and export a seeded rollout. Damage training and paired recovery diagnostics are available; a fixed multi-seed recovery study is available; broader experiments and the playground are next. A small geometric-leaf trial produces recognizable early growth but drifts over longer rollouts. Long-term stability and general recovery robustness remain unverified.
+## Setup
 
-## Getting started
-
-Python 3.11 or newer is required, with a compatible PyTorch build.
+Requires Python 3.11+ and a compatible PyTorch build.
 
 ```sh
 python3 -m venv .venv
 source .venv/bin/activate
-python -m pip install -e '.[dev]'
-python -m pytest
+pip install -e '.[dev]'
 ```
 
-```python
-import torch
-from ncap import NeuralCellularAutomata, create_seed, state_to_rgba
+## Train and simulate
 
-model = NeuralCellularAutomata(channels=16)
-seed = create_seed(height=64, width=64)
-state = model.rollout(seed, steps=64, generator=torch.Generator().manual_seed(0))
-rgba = state_to_rgba(state)  # [1, 4, 64, 64], unclamped
-```
-
-The update network starts with a zero output layer, so an untrained model preserves the seed. Use the training workflow below to learn a target.
-
-## Core
-
-States use `[batch, channels, height, width]`: RGB, alpha, then hidden channels. By default, 16 channels hold four visible and twelve hidden values. The seed activates alpha and hidden state in the center cell.
-
-Each cell perceives its own state and normalized Sobel X/Y gradients. A shared two-layer network predicts a residual update, applied independently to cells with probability 0.5. A cell survives only if its 3×3 neighborhood contains alpha greater than 0.1 both before and after the update. Perception uses zero padding at grid boundaries.
-
-| File | Purpose |
-| --- | --- |
-| `src/ncap/state.py` | Seeds and visible-channel conversion |
-| `src/ncap/perception.py` | Fixed identity and Sobel filters |
-| `src/ncap/model.py` | Shared update rule and rollout |
-| `tests/test_core.py` | Numerical invariants and gradient checks |
-
-## Train one target
-
-Supply a local image or use the bundled original geometric leaf (`assets/targets/leaf.png`, reproducible with `python scripts/make_leaf.py`). No pretrained checkpoints are bundled. Images are fitted into the configured square grid with aspect ratio preserved and transparent padding. The objective is mean squared error over premultiplied RGB and alpha, so invisible RGB values do not affect the loss. Exports composite the visible channels on white.
-
-```sh
-ncap-train --target /path/to/target.png --config configs/base.json \
-  --output data/runs/first-target
-ncap-simulate --checkpoint data/runs/first-target/checkpoint.pt \
-  --steps 96 --seed 10000 --output data/exports/first-target
-```
-
-After installation, `python scripts/train.py` and `python scripts/simulate.py` accept the same options. `--steps` overrides training iterations for training, and means automaton updates for simulation. `--seed` sets the corresponding random seed. The base configuration trains for 8,000 iterations with 64–96 updates per iteration; this is a starting configuration, not a validated recipe or guaranteed convergence.
-
-Both commands require a new output directory and refuse to overwrite an existing run. Failed runs retain their artifacts and a failure status. Training runs contain:
-
-| Artifact | Contents |
-| --- | --- |
-| `config.json`, `environment.json` | Settings, seeds, runtime versions, source hashes, Git state, target hash |
-| `target-source`, `target.png` | Original target bytes and fitted preview |
-| `loss.csv` | Training iteration, sampled rollout length, and loss |
-| `checkpoint.pt` | Model, optimizer, settings, iteration, and training RNG states |
-| `metrics.json` | Seed loss and final loss for one separately seeded rollout |
-| `final.png`, `growth.gif` | Final state and sampled rollout frames on white |
-| `status.json` | Running, complete, or failed status |
-
-Training runs on CPU. The base configuration starts every batch from fresh seeds. Set `pool_size` to at least `batch_size` to reuse grown states; zero disables the pool. Each sampled batch replaces its highest-loss state with a fresh seed, and rollout results return to the pool without their gradient history. Checkpoints also retain pool contents and the sampling RNG state. The final metric uses the training target and one evaluation seed; it is a diagnostic, not held-out evidence or a stability test. Checkpoints support simulation; a resume-training command is not implemented. Exact replay is tested within the same runtime, not promised across platforms or PyTorch versions.
-
-## State pools and persistence
+Train the included leaf target, then export a rollout:
 
 ```sh
 ncap-train --target assets/targets/leaf.png --config configs/leaf-small.json \
-  --output data/runs/leaf-small
-ncap-evaluate --checkpoint data/runs/leaf-small/checkpoint.pt \
-  --target data/runs/leaf-small/target-source --horizons 40 80 160 320 \
-  --seeds 10000 10001 10002 --output data/exports/leaf-persistence
+  --output data/runs/leaf
+
+ncap-simulate --checkpoint data/runs/leaf/checkpoint.pt \
+  --steps 80 --output data/exports/leaf
 ```
 
-`configs/leaf-small.json` is a small 24×24, 1,000-iteration exploratory run. `configs/growth.json` enables a 128-state pool with the larger base settings. Neither is a validated convergence recipe.
+Outputs include a checkpoint, loss metrics, a final image, and a growth GIF. Use a new output directory for each run. Generated files stay under `data/` and are ignored by Git.
 
-Evaluation follows each seeded trajectory continuously through the requested horizons; it does not restart at each horizon. It records visible-channel MSE, alpha-mask intersection over union (threshold 0.1), foreground cell count, and a PNG at each horizon. The output includes checkpoint and target hashes, seeds, settings, and runtime versions. It refuses existing output folders and records failures. Compare later horizons with the training horizon to investigate decay or divergence. These are same-target diagnostics, not held-out evidence or a guarantee of stability.
+## Experiments
 
-### Exploratory leaf result
-
-One 1,000-iteration run with `configs/leaf-small.json` produced a recognizable low-resolution leaf. Across evaluation seeds 10000–10002, alpha IoU was 0.797–0.874 at step 40 and fell to 0.613–0.678 at step 320. This is evidence of early growth and later drift on one training seed and one target; it does not establish robustness or a benefit over seed-only training. Run artifacts remain local under ignored `data/`.
-
-## Damage and recovery diagnostics
-
-```sh
-ncap-train --target assets/targets/leaf.png --config configs/regeneration.json \
-  --output data/runs/leaf-regeneration
-ncap-recovery --checkpoint data/runs/leaf-regeneration/checkpoint.pt \
-  --target data/runs/leaf-regeneration/target-source --grow-steps 40 \
-  --recovery-steps 80 --fractions 0 0.1 0.25 0.5 1 \
-  --seeds 20000 20001 20002 --output data/exports/leaf-recovery
-```
-
-`damage_probability` selects previously grown pool samples for damage; freshly injected seeds remain intact. `damage_fraction` removes exactly the rounded fraction of **all grid cells**, including background, and clears RGB, alpha, and hidden state. Damage sampling uses its own saved random generator. Defaults leave damage disabled; enabling it requires a pool. The small regeneration configuration is exploratory.
-
-`ncap.damage` also provides non-mutating circular and rectangular cuts for experiments. Circle centers are `(row, column)` and rectangle coordinates must fit the grid. Training uses random cell removal. The recovery command also accepts `--geometry center`, `edge`, or `horizontal`.
-
-Recovery evaluation grows a state, damages it, and advances it beside an undamaged control with identical stochastic update draws. It records pre-damage, immediate post-damage, recovered, and control losses, actual foreground removal, and corresponding PNGs. Zero damage should exactly match the control; complete removal remains dead. Fractions share a random cell ordering within each seed, giving nested damage masks. Outputs preserve target bytes, hashes, settings, source fingerprints, runtime, and failure status in a new directory.
-
-A lower final loss alone does not establish regeneration: compare it with the immediate damaged loss and the undamaged control. This command does not estimate recovery time, thresholded success rate, or held-out generalization.
-
-### Exploratory recovery result
-
-With one training seed and the geometric leaf, after 40 growth updates, 25% random grid-cell removal, and 80 recovery updates, mean visible-channel MSE across evaluation seeds 20000–20002 was:
-
-| Model | Immediately damaged | After recovery | Undamaged control |
-| --- | --- | --- | --- |
-| Growth-only pool | 0.02156 | 0.01093 | 0.00411 |
-| Damage-trained pool | 0.02067 | 0.00386 | 0.00352 |
-
-Both used 1,000 training iterations and otherwise matching small-leaf settings. This limited comparison supports partial recovery in this trial, not general robustness. Complete erasure remained dead. Longer-term drift, additional training seeds, targets, and damage geometries still need evaluation.
-
-## Fixed multi-seed comparison
+Use `configs/regeneration.json` for damage training, or run the fixed recovery comparison:
 
 ```sh
 ncap-study --target assets/targets/leaf.png --plan configs/recovery-study.json \
   --output data/studies/leaf-recovery
 ```
 
-The checked-in exploratory plan trains six models: growth-only and damage-trained variants for each of three training seeds. It varies only damage probability within each matched pair. Each model is evaluated on three separate update seeds, four geometries, and grid-removal fractions 0, 0.25, 0.5, and 1. Growth and recovery durations are fixed at 40 and 80 updates. This is a same-target comparison; evaluation seeds are not held-out targets or a final test set.
+`ncap-evaluate` measures persistence and `ncap-recovery` tests recovery after damage. Run any command with `--help` for options.
 
-Every geometry removes exactly `round(fraction × height × width)` cells. Center cuts rank cells by distance from the grid center; edge cuts proceed from the left; horizontal cuts proceed outward from the middle rows. Ties use row-major order, so a cut boundary may contain a partial row or column. Equal grid area does not imply equal damage to the organism: inspect `foreground_removed_fraction` in the detailed rows.
+## Tests
 
-A study saves the original target, fixed plan and hashes, each training run and recovery evaluation, all observations in `rows.json`, and `summary.json`. Evaluation seeds are averaged within each model first. The summary reports each matched training-seed pair, mean damage-trained minus growth-only loss, and the sample standard deviation of those paired differences. Negative differences favor damage training. It does not treat repeated evaluations of one trained model as independent training replicates or report confidence intervals from three seeds.
-
-Existing directories are rejected. Failed studies retain their plan, completed models, available rows, and failure status; automatic resume and model selection are not implemented. The remaining planned channel-count, update-rate, and long-term persistence sweeps are separate experiments.
-
-### Three-training-seed result
-
-The fixed leaf study completed six trained models and 288 observations. At 25% **grid-cell** removal, mean recovery MSE (evaluation seeds averaged within each model) was:
-
-| Geometry | Growth-only | Damage-trained | SD of paired differences |
-| --- | --- | --- | --- |
-| Random removal | 0.00792 | 0.00369 | 0.00412 |
-| Center | 0.06523 | 0.06344 | 0.00158 |
-| Left edge | 0.00397 | 0.00352 | 0.00053 |
-| Horizontal | 0.06296 | 0.01264 | 0.06110 |
-
-Random-removal loss improved in all three training-seed pairs. Center cuts remained poor; they remove much more of this centered leaf than left-edge cuts at the same grid fraction. Edge-cut differences were mixed across seeds. Horizontal gains varied substantially. These results describe one target and one fixed recovery duration, with only three training seeds; they do not establish long-term stability, statistical significance, or generalization to new targets. The full local results are retained under `data/studies/leaf-recovery-01/`.
-
-## Next milestones
-
-1. Validate target growth across training seeds and targets.
-2. Evaluate persistence beyond training rollout lengths.
-3. Compare damage-trained and growth-only models across training seeds and damage geometries.
-4. Run controlled robustness experiments.
-5. Build an interactive playground around validated models.
-
-Generated runs, checkpoints, and exports belong under `data/` and are excluded from Git.
+```sh
+python -m pytest
+```
