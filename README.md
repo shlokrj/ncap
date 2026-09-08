@@ -37,7 +37,14 @@ ncap-study --target assets/targets/leaf.png --plan configs/recovery-study.json \
   --output data/studies/leaf-recovery
 ```
 
-`ncap-evaluate` measures persistence and `ncap-recovery` tests recovery after damage. Run any command with `--help` for options.
+Compare long-term growth using the models from that study:
+
+```sh
+ncap-persistence --study data/studies/leaf-recovery \
+  --plan configs/persistence-study.json --output data/studies/leaf-persistence
+```
+
+`ncap-evaluate` checks one model and `ncap-recovery` tests recovery after damage. Run any command with `--help` for options.
 
 ## Tests
 

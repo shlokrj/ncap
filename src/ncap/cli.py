@@ -92,3 +92,13 @@ def study_main():
     parser.add_argument('--output', required=True, type=Path)
     args = parser.parse_args()
     print(json.dumps(run_study(args.target, args.output, json.loads(args.plan.read_text())), indent=2))
+
+
+def persistence_main():
+    from .persistence import run_persistence
+    parser = argparse.ArgumentParser(description='Compare persistence of every model in a completed study.')
+    parser.add_argument('--study', required=True, type=Path)
+    parser.add_argument('--plan', required=True, type=Path)
+    parser.add_argument('--output', required=True, type=Path)
+    args = parser.parse_args()
+    print(json.dumps(run_persistence(args.study, args.output, json.loads(args.plan.read_text())), indent=2))

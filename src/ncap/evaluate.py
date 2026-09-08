@@ -58,6 +58,7 @@ def evaluate(checkpoint, target_path, output, horizons=(64, 96, 192, 384), seeds
                                 'foreground_cells': foreground.sum().item()})
                 render_state(state).save(output / f'seed-{seed}-step-{horizon}.png')
                 previous = horizon
+                write_json(output / 'metrics.json', results)
         write_json(output / 'metrics.json', results)
         write_json(output / 'status.json', {'status': 'complete'})
         return results

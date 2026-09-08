@@ -18,6 +18,8 @@ ncap-recovery = "ncap.cli:recovery_main"
 
 ncap-study = "ncap.cli:study_main"
 
+ncap-persistence = "ncap.cli:persistence_main"
+
 [project.optional-dependencies]
 dev = ["pytest>=8,<10"]
 
