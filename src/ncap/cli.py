@@ -102,3 +102,13 @@ def persistence_main():
     parser.add_argument('--output', required=True, type=Path)
     args = parser.parse_args()
     print(json.dumps(run_persistence(args.study, args.output, json.loads(args.plan.read_text())), indent=2))
+
+
+def horizon_main():
+    from .horizon_study import run_horizon_study
+    parser = argparse.ArgumentParser(description='Compare short and long training rollouts.')
+    parser.add_argument('--target', required=True, type=Path)
+    parser.add_argument('--plan', required=True, type=Path)
+    parser.add_argument('--output', required=True, type=Path)
+    args = parser.parse_args()
+    print(json.dumps(run_horizon_study(args.target, args.output, json.loads(args.plan.read_text())), indent=2))

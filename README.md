@@ -44,7 +44,7 @@ ncap-persistence --study data/studies/leaf-recovery \
   --plan configs/persistence-study.json --output data/studies/leaf-persistence
 ```
 
-`ncap-evaluate` checks one model and `ncap-recovery` tests recovery after damage. Run any command with `--help` for options.
+`ncap-evaluate` checks one model and `ncap-recovery` tests recovery after damage. `ncap-horizons` compares short and long training rollouts using `configs/horizon-study.json`. Run any command with `--help` for options.
 
 ## Tests
 

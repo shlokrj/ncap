@@ -20,6 +20,8 @@ ncap-study = "ncap.cli:study_main"
 
 ncap-persistence = "ncap.cli:persistence_main"
 
+ncap-horizons = "ncap.cli:horizon_main"
+
 [project.optional-dependencies]
 dev = ["pytest>=8,<10"]
 
