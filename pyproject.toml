@@ -24,6 +24,8 @@ ncap-horizons = "ncap.cli:horizon_main"
 
 ncap-bounds = "ncap.cli:bounds_main"
 
+ncap-objective = "ncap.cli:objective_main"
+
 [project.optional-dependencies]
 dev = ["pytest>=8,<10"]
 

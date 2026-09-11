@@ -15,7 +15,7 @@ import torch
 
 from .damage import cell_dropout
 from .config import TrainConfig
-from .losses import image_loss
+from .losses import image_loss, excess_state_loss
 from .pool import StatePool
 from .model import NeuralCellularAutomata
 from .simulate import export_rollout
@@ -77,7 +77,7 @@ def train(target_path, output, config: TrainConfig):
         started = time.monotonic()
         with (output / 'loss.csv').open('w', newline='') as stream:
             writer = csv.writer(stream)
-            writer.writerow(['iteration', 'rollout_steps', 'loss'])
+            writer.writerow(['iteration', 'rollout_steps', 'loss', 'image_loss', 'excess_loss'])
             for iteration in range(1, config.iterations + 1):
                 steps = rng.randint(config.min_steps, config.max_steps)
                 optimizer.zero_grad(set_to_none=True)
@@ -94,7 +94,9 @@ def train(target_path, output, config: TrainConfig):
                         batch[selected] = cell_dropout(batch[selected], config.damage_fraction,
                                                        generator=damage_generator)
                 state = model.rollout(batch, steps, generator=generator)
-                loss = image_loss(state, target)
+                reconstruction = image_loss(state, target)
+                excess = excess_state_loss(state, config.excess_threshold)
+                loss = reconstruction + config.excess_weight * excess if config.excess_weight else reconstruction
                 if not torch.isfinite(loss):
                     raise FloatingPointError('nonfinite training loss')
                 loss.backward()
@@ -102,7 +104,7 @@ def train(target_path, output, config: TrainConfig):
                 optimizer.step()
                 if pool is not None:
                     pool.commit(indices, state)
-                writer.writerow([iteration, steps, loss.item()])
+                writer.writerow([iteration, steps, loss.item(), reconstruction.item(), excess.item()])
                 stream.flush()
                 if iteration == 1 or iteration % 100 == 0 or iteration == config.iterations:
                     print(f'iteration {iteration}/{config.iterations}: loss={loss.item():.6f}', flush=True)

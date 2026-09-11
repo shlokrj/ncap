@@ -24,10 +24,16 @@ class TrainConfig:
     damage_probability: float = 0.0
     damage_fraction: float = 0.25
     state_limit: float | None = None
+    excess_weight: float = 0.0
+    excess_threshold: float = 2.0
 
     def __post_init__(self):
         if self.state_limit is not None and (isinstance(self.state_limit, bool) or not math.isfinite(self.state_limit) or self.state_limit < 1):
             raise ValueError('state_limit must be finite and at least one, or None')
+        if not math.isfinite(self.excess_weight) or self.excess_weight < 0:
+            raise ValueError('excess_weight must be finite and nonnegative')
+        if not math.isfinite(self.excess_threshold) or self.excess_threshold < 1:
+            raise ValueError('excess_threshold must be finite and at least one')
         integer_fields = ('channels', 'hidden_size', 'size', 'padding', 'batch_size',
                           'iterations', 'min_steps', 'max_steps', 'seed', 'eval_seed',
                           'eval_steps', 'threads', 'pool_size')

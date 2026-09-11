@@ -122,3 +122,13 @@ def bounds_main():
     parser.add_argument('--output', required=True, type=Path)
     args = parser.parse_args()
     print(json.dumps(run_bound_study(args.target, args.output, json.loads(args.plan.read_text())), indent=2))
+
+
+def objective_main():
+    from .objective_study import run_objective_study
+    parser = argparse.ArgumentParser(description='Compare image-only and excess-state training objectives.')
+    parser.add_argument('--target', required=True, type=Path)
+    parser.add_argument('--plan', required=True, type=Path)
+    parser.add_argument('--output', required=True, type=Path)
+    args = parser.parse_args()
+    print(json.dumps(run_objective_study(args.target, args.output, json.loads(args.plan.read_text())), indent=2))

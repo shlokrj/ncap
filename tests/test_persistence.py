@@ -92,7 +92,8 @@ def test_source_checkpoint_without_new_optional_field(study, tmp_path):
     for name in ['growth-0', 'damage-0', 'growth-1', 'damage-1']:
         path = study / name / 'checkpoint.pt'
         checkpoint = torch.load(path, weights_only=True)
-        checkpoint['config'].pop('state_limit')
+        for key in ('state_limit', 'excess_weight', 'excess_threshold'):
+            checkpoint['config'].pop(key)
         torch.save(checkpoint, path)
     summary = run_persistence(study, tmp_path / 'legacy',
                               {'horizons': [3, 8], 'evaluation_seeds': [20]})
