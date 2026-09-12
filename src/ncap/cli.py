@@ -112,3 +112,13 @@ def horizon_main():
     parser.add_argument('--output', required=True, type=Path)
     args = parser.parse_args()
     print(json.dumps(run_horizon_study(args.target, args.output, json.loads(args.plan.read_text())), indent=2))
+
+
+def bounds_main():
+    from .bound_study import run_bound_study
+    parser = argparse.ArgumentParser(description='Compare bounded and unbounded cell states.')
+    parser.add_argument('--target', required=True, type=Path)
+    parser.add_argument('--plan', required=True, type=Path)
+    parser.add_argument('--output', required=True, type=Path)
+    args = parser.parse_args()
+    print(json.dumps(run_bound_study(args.target, args.output, json.loads(args.plan.read_text())), indent=2))

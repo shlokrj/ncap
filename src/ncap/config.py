@@ -23,8 +23,11 @@ class TrainConfig:
     pool_size: int = 0
     damage_probability: float = 0.0
     damage_fraction: float = 0.25
+    state_limit: float | None = None
 
     def __post_init__(self):
+        if self.state_limit is not None and (isinstance(self.state_limit, bool) or not math.isfinite(self.state_limit) or self.state_limit < 1):
+            raise ValueError('state_limit must be finite and at least one, or None')
         integer_fields = ('channels', 'hidden_size', 'size', 'padding', 'batch_size',
                           'iterations', 'min_steps', 'max_steps', 'seed', 'eval_seed',
                           'eval_steps', 'threads', 'pool_size')

@@ -55,7 +55,8 @@ def evaluate(checkpoint, target_path, output, horizons=(64, 96, 192, 384), seeds
                 union = (foreground | expected).sum().item()
                 results.append({'seed': seed, 'step': horizon, 'loss': image_loss(state, target).item(),
                                 'alpha_iou': intersection / union if union else 1.0,
-                                'foreground_cells': foreground.sum().item()})
+                                'foreground_cells': foreground.sum().item(),
+                                'state_abs_max': state.abs().max().item()})
                 render_state(state).save(output / f'seed-{seed}-step-{horizon}.png')
                 previous = horizon
                 write_json(output / 'metrics.json', results)

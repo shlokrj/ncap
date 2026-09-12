@@ -79,7 +79,7 @@ def run_persistence(source, output, plan):
             data = (run / 'checkpoint.pt').read_bytes()
             checkpoint = torch.load(BytesIO(data), weights_only=True, map_location='cpu')
             expected = asdict(replace(config, seed=seed, damage_probability=0 if variant == 'growth' else config.damage_probability))
-            if checkpoint['config'] != expected or checkpoint['iteration'] != expected['iterations']:
+            if asdict(TrainConfig(**checkpoint['config'])) != expected or checkpoint['iteration'] != expected['iterations']:
                 raise ValueError(f'checkpoint settings do not match study: {name}')
             environment = json.loads((run / 'environment.json').read_text())
             if environment['target_sha256'] != source_manifest['target_sha256']:

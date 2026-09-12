@@ -1,5 +1,6 @@
 """A stochastic residual rule shared by every cell in the grid."""
 
+import math
 import torch
 from torch import Tensor, nn
 from torch.nn import functional as F
@@ -10,10 +11,13 @@ from .state import validate_state
 
 class NeuralCellularAutomata(nn.Module):
     def __init__(self, channels: int = 16, hidden_size: int = 128,
-                 fire_rate: float = 0.5):
+                 fire_rate: float = 0.5, state_limit: float | None = None):
         super().__init__()
         if hidden_size < 1 or not 0 <= fire_rate <= 1:
             raise ValueError("hidden_size must be positive and fire_rate must be in [0, 1]")
+        if state_limit is not None and (isinstance(state_limit, bool) or not math.isfinite(state_limit) or state_limit < 1):
+            raise ValueError('state_limit must be finite and at least one, or None')
+        self.state_limit = state_limit
         self.fire_rate = fire_rate
         self.perceive = SobelPerception(channels)
         self.update = nn.Sequential(nn.Conv2d(channels * 3, hidden_size, 1),
@@ -32,6 +36,8 @@ class NeuralCellularAutomata(nn.Module):
         fired = torch.rand(state.shape[0], 1, *state.shape[2:], device=state.device,
                            generator=generator) < self.fire_rate
         updated = state + delta * fired
+        if self.state_limit is not None:
+            updated = updated.clamp(-self.state_limit, self.state_limit)
         return updated * (alive_before & self.alive_mask(updated))
 
     def rollout(self, state: Tensor, steps: int, *,

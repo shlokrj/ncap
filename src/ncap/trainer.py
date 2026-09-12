@@ -57,7 +57,7 @@ def train(target_path, output, config: TrainConfig):
         torch.manual_seed(config.seed)
         rng = random.Random(config.seed)
         generator = torch.Generator().manual_seed(config.seed)
-        model = NeuralCellularAutomata(config.channels, config.hidden_size, config.fire_rate)
+        model = NeuralCellularAutomata(config.channels, config.hidden_size, config.fire_rate, config.state_limit)
         optimizer = torch.optim.Adam(model.parameters(), lr=config.learning_rate)
         write_json(output / 'config.json', asdict(config))
         write_json(output / 'environment.json', {

@@ -29,7 +29,8 @@ def load_checkpoint(path):
     if checkpoint.get('format_version') != 1:
         raise ValueError('unsupported checkpoint format')
     config = checkpoint['config']
-    model = NeuralCellularAutomata(config['channels'], config['hidden_size'], config['fire_rate'])
+    model = NeuralCellularAutomata(config['channels'], config['hidden_size'], config['fire_rate'],
+                                    config.get('state_limit'))
     model.load_state_dict(checkpoint['model'])
     model.eval()
     return model, config

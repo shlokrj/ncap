@@ -86,3 +86,14 @@ def test_evaluation_preserves_earlier_measurements(tmp_path, monkeypatch):
         module.evaluate(checkpoint, target, output, horizons=[1,2], seeds=[20])
     assert len(json.loads((output / 'metrics.json').read_text())) == 1
     assert json.loads((output / 'status.json').read_text())['status'] == 'failed'
+
+
+def test_source_checkpoint_without_new_optional_field(study, tmp_path):
+    for name in ['growth-0', 'damage-0', 'growth-1', 'damage-1']:
+        path = study / name / 'checkpoint.pt'
+        checkpoint = torch.load(path, weights_only=True)
+        checkpoint['config'].pop('state_limit')
+        torch.save(checkpoint, path)
+    summary = run_persistence(study, tmp_path / 'legacy',
+                              {'horizons': [3, 8], 'evaluation_seeds': [20]})
+    assert len(summary) == 6
