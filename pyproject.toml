@@ -26,6 +26,8 @@ ncap-bounds = "ncap.cli:bounds_main"
 
 ncap-objective = "ncap.cli:objective_main"
 
+ncap-budgets = "ncap.cli:budget_main"
+
 [project.optional-dependencies]
 dev = ["pytest>=8,<10"]
 

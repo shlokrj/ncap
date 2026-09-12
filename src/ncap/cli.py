@@ -132,3 +132,13 @@ def objective_main():
     parser.add_argument('--output', required=True, type=Path)
     args = parser.parse_args()
     print(json.dumps(run_objective_study(args.target, args.output, json.loads(args.plan.read_text())), indent=2))
+
+
+def budget_main():
+    from .budget_study import run_budget_study
+    parser = argparse.ArgumentParser(description='Compare predeclared training budgets on matched trajectories.')
+    parser.add_argument('--target', required=True, type=Path)
+    parser.add_argument('--plan', required=True, type=Path)
+    parser.add_argument('--output', required=True, type=Path)
+    args = parser.parse_args()
+    print(json.dumps(run_budget_study(args.target, args.output, json.loads(args.plan.read_text())), indent=2))

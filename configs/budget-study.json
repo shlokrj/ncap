@@ -1,0 +1,46 @@
+{
+  "training": {
+    "channels": 16,
+    "hidden_size": 32,
+    "fire_rate": 0.5,
+    "size": 24,
+    "padding": 4,
+    "batch_size": 4,
+    "iterations": 1000,
+    "min_steps": 48,
+    "max_steps": 80,
+    "learning_rate": 0.002,
+    "seed": 0,
+    "eval_seed": 10000,
+    "eval_steps": 40,
+    "threads": 1,
+    "pool_size": 128,
+    "damage_probability": 0.5,
+    "damage_fraction": 0.25,
+    "state_limit": null,
+    "excess_weight": 0.0,
+    "excess_threshold": 2.0
+  },
+  "training_seeds": [
+    0,
+    1,
+    2
+  ],
+  "evaluation_seeds": [
+    80000,
+    80001,
+    80002
+  ],
+  "horizons": [
+    40,
+    80,
+    160,
+    320,
+    640,
+    1000
+  ],
+  "budgets": [
+    300,
+    1000
+  ]
+}

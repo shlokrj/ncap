@@ -1,7 +1,7 @@
 """Seed or state-pool training with immutable run folders and auditable artifacts."""
 
 import csv
-from dataclasses import asdict
+from dataclasses import asdict, replace
 import hashlib
 import json
 import platform
@@ -42,7 +42,11 @@ def git_metadata():
         return {'git_revision': None, 'git_dirty': None}
 
 
-def train(target_path, output, config: TrainConfig):
+def train(target_path, output, config: TrainConfig, *, checkpoint_iterations=()):
+    checkpoint_iterations = tuple(checkpoint_iterations)
+    if len(set(checkpoint_iterations)) != len(checkpoint_iterations) or any(
+            type(i) is not int or not 1 <= i < config.iterations for i in checkpoint_iterations):
+        raise ValueError('checkpoint iterations must be distinct positive values below the final iteration')
     target_path, output = Path(target_path), Path(output)
     # Snapshot first: the exact bytes used for target loading are retained in the run.
     target_bytes = target_path.read_bytes()
@@ -60,6 +64,7 @@ def train(target_path, output, config: TrainConfig):
         model = NeuralCellularAutomata(config.channels, config.hidden_size, config.fire_rate, config.state_limit)
         optimizer = torch.optim.Adam(model.parameters(), lr=config.learning_rate)
         write_json(output / 'config.json', asdict(config))
+        write_json(output / 'checkpoint-plan.json', {'iterations': sorted(checkpoint_iterations)})
         write_json(output / 'environment.json', {
             'python': platform.python_version(), 'torch': str(torch.__version__),
             'pillow': pillow_version, 'platform': platform.platform(), 'device': 'cpu',
@@ -75,6 +80,16 @@ def train(target_path, output, config: TrainConfig):
         pool_generator = torch.Generator().manual_seed(config.seed)
         damage_generator = torch.Generator().manual_seed(config.seed)
         started = time.monotonic()
+        def save_checkpoint(path, iteration):
+            torch.save({'format_version': 1, 'config': asdict(replace(config, iterations=iteration)),
+                        'planned_iterations': config.iterations, 'model': model.state_dict(),
+                        'optimizer': optimizer.state_dict(), 'iteration': iteration,
+                        'training_seconds': time.monotonic() - started,
+                        'pool': pool.states if pool is not None else None,
+                        'pool_generator_state': pool_generator.get_state(),
+                        'damage_generator_state': damage_generator.get_state(),
+                        'generator_state': generator.get_state(), 'python_rng_state': rng.getstate()}, path)
+
         with (output / 'loss.csv').open('w', newline='') as stream:
             writer = csv.writer(stream)
             writer.writerow(['iteration', 'rollout_steps', 'loss', 'image_loss', 'excess_loss'])
@@ -106,15 +121,11 @@ def train(target_path, output, config: TrainConfig):
                     pool.commit(indices, state)
                 writer.writerow([iteration, steps, loss.item(), reconstruction.item(), excess.item()])
                 stream.flush()
+                if iteration in checkpoint_iterations:
+                    save_checkpoint(output / f'checkpoint-{iteration}.pt', iteration)
                 if iteration == 1 or iteration % 100 == 0 or iteration == config.iterations:
                     print(f'iteration {iteration}/{config.iterations}: loss={loss.item():.6f}', flush=True)
-        torch.save({'format_version': 1, 'config': asdict(config), 'model': model.state_dict(),
-                    'optimizer': optimizer.state_dict(), 'iteration': config.iterations,
-                    'pool': pool.states if pool is not None else None,
-                    'pool_generator_state': pool_generator.get_state(),
-                    'damage_generator_state': damage_generator.get_state(),
-                    'generator_state': generator.get_state(), 'python_rng_state': rng.getstate()},
-                   output / 'checkpoint.pt')
+        save_checkpoint(output / 'checkpoint.pt', config.iterations)
         model.eval()
         final = export_rollout(model, size=config.size, steps=config.eval_steps,
                                seed=config.eval_seed, output=output)

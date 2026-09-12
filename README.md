@@ -44,7 +44,18 @@ ncap-persistence --study data/studies/leaf-recovery \
   --plan configs/persistence-study.json --output data/studies/leaf-persistence
 ```
 
-`ncap-evaluate` checks one model and `ncap-recovery` tests recovery after damage. `ncap-horizons` compares short and long training rollouts using `configs/horizon-study.json`. `ncap-bounds` tests optional state limits using `configs/bound-study.json`. `ncap-objective` compares training penalties using `configs/objective-study.json`. Run any command with `--help` for options.
+Other experiments:
+
+| Command | Purpose |
+| --- | --- |
+| `ncap-evaluate` | Check one model |
+| `ncap-recovery` | Test damage recovery |
+| `ncap-horizons` | Compare training rollout lengths |
+| `ncap-bounds` | Test cell-state limits |
+| `ncap-objective` | Compare training penalties |
+| `ncap-budgets` | Compare training budgets |
+
+Plans are in `configs/`. Run any command with `--help` for options.
 
 ## Tests
 
