@@ -1,6 +1,8 @@
 """Compare fixed training budgets along matched trajectories, without checkpoint selection."""
 
 import csv
+from concurrent.futures import ProcessPoolExecutor, as_completed
+import multiprocessing
 from dataclasses import replace
 import hashlib
 from pathlib import Path
@@ -9,6 +11,8 @@ import torch
 
 from .config import TrainConfig
 from .evaluate import evaluate
+from .damage import GEOMETRIES
+from .recovery import evaluate_recovery
 from .trainer import train, write_json
 
 
@@ -35,9 +39,64 @@ def summarize_budgets(rows):
     return result
 
 
-def run_budget_study(target, output, plan):
-    if set(plan) != {'training','training_seeds','evaluation_seeds','horizons','budgets'}:
+def summarize_budget_recovery(rows):
+    result = []
+    conditions = sorted({(r['geometry'], r['fraction']) for r in rows})
+    for geometry, fraction in conditions:
+        selected = [r for r in rows if r['geometry'] == geometry and r['fraction'] == fraction]
+        budgets = sorted({r['budget'] for r in selected})
+        seeds = sorted({r['training_seed'] for r in selected})
+        for metric in ('grown_loss', 'damaged_loss', 'recovered_loss', 'control_loss'):
+            for budget in budgets:
+                pairs = []
+                for seed in seeds:
+                    baseline = mean(r[metric] for r in selected if r['budget'] == budgets[0] and r['training_seed'] == seed)
+                    value = mean(r[metric] for r in selected if r['budget'] == budget and r['training_seed'] == seed)
+                    pairs.append(dict(training_seed=seed, baseline=baseline, value=value, delta=value-baseline))
+                result.append(dict(geometry=geometry, fraction=fraction, metric=metric, budget=budget,
+                                   baseline_budget=budgets[0], training_seed_count=len(seeds),
+                                   mean=mean(p['value'] for p in pairs),
+                                   paired_delta_mean=mean(p['delta'] for p in pairs),
+                                   paired_delta_sd=stdev(p['delta'] for p in pairs) if len(pairs)>1 else None,
+                                   pairs=pairs))
+    return result
+
+
+def _run_budget_seed(output, config, seed, budgets, plan):
+    run = output / f'train-{seed}'
+    print(f'budget study: training seed {seed}', flush=True)
+    train(output/'target-source', run, replace(config, seed=seed), checkpoint_iterations=budgets[:-1])
+    with (run/'loss.csv').open() as stream:
+        log = list(csv.DictReader(stream))
+    rows, costs, recovery_rows = [], [], []
+    for budget in budgets:
+        checkpoint = run/('checkpoint.pt' if budget == budgets[-1] else f'checkpoint-{budget}.pt')
+        saved = torch.load(checkpoint, weights_only=True, map_location='cpu')
+        updates = sum(int(r['rollout_steps']) for r in log[:budget])
+        costs.append(dict(training_seed=seed, budget=budget, rollout_updates=updates,
+                          sample_updates=updates*config.batch_size, training_seconds=saved['training_seconds'],
+                          checkpoint_sha256=hashlib.sha256(checkpoint.read_bytes()).hexdigest()))
+        metrics = evaluate(checkpoint, output/'target-source', output/f'eval-{seed}-{budget}',
+                           horizons=plan['horizons'], seeds=plan['evaluation_seeds'])
+        rows.extend(dict(row, training_seed=seed, budget=budget) for row in metrics)
+        if 'recovery' in plan:
+            recovery = plan['recovery']
+            for geometry in recovery['geometries']:
+                metrics = evaluate_recovery(checkpoint, output/'target-source',
+                                            output/f'recovery-{seed}-{budget}-{geometry}',
+                                            grow_steps=recovery['grow_steps'], recovery_steps=recovery['recovery_steps'],
+                                            fractions=recovery['fractions'], seeds=plan['evaluation_seeds'], geometry=geometry)
+                recovery_rows.extend(dict(row, training_seed=seed, budget=budget) for row in metrics)
+        write_json(output/f'seed-{seed}-results.json', dict(rows=rows, costs=costs, recovery_rows=recovery_rows))
+    return rows, costs, recovery_rows
+
+
+def run_budget_study(target, output, plan, *, workers=1):
+    required = {'training','training_seeds','evaluation_seeds','horizons','budgets'}
+    if not required <= set(plan) or set(plan) - required - {'recovery'}:
         raise ValueError('unexpected or missing budget study fields')
+    if type(workers) is not int or workers < 1:
+        raise ValueError('workers must be a positive integer')
     config = TrainConfig(**plan['training'])
     for key in ('training_seeds','evaluation_seeds','horizons','budgets'):
         values = plan[key]
@@ -50,42 +109,63 @@ def run_budget_study(target, output, plan):
         raise ValueError('training and evaluation seeds must be disjoint')
     if max(plan['horizons'])<=config.max_steps:
         raise ValueError('evaluation must extend beyond the training rollout range')
-    target_bytes=Path(target).read_bytes()
-    output=Path(output)
-    output.mkdir(parents=True,exist_ok=False)
-    write_json(output/'status.json',{'status':'running'})
+    if 'recovery' in plan:
+        recovery = plan['recovery']
+        if set(recovery) != {'grow_steps','recovery_steps','fractions','geometries'}:
+            raise ValueError('invalid recovery fields')
+        if any(type(recovery[k]) is not int or recovery[k] < 1 for k in ('grow_steps','recovery_steps')):
+            raise ValueError('recovery step counts must be positive integers')
+        fractions, geometries = recovery['fractions'], recovery['geometries']
+        if not fractions or any(not 0 <= f <= 1 for f in fractions) or len(set(fractions)) != len(fractions):
+            raise ValueError('invalid recovery fractions')
+        if not geometries or any(g not in GEOMETRIES for g in geometries) or len(set(geometries)) != len(geometries):
+            raise ValueError('invalid recovery geometries')
+    target_bytes = Path(target).read_bytes()
+    output = Path(output).resolve()
+    output.mkdir(parents=True, exist_ok=False)
+    write_json(output/'status.json', {'status':'running'})
     try:
         (output/'target-source').write_bytes(target_bytes)
-        write_json(output/'plan.json',plan)
-        write_json(output/'manifest.json',{
+        write_json(output/'plan.json', plan)
+        write_json(output/'manifest.json', {
             'target_sha256':hashlib.sha256(target_bytes).hexdigest(),
             'plan_sha256':hashlib.sha256((output/'plan.json').read_bytes()).hexdigest(),
+            'workers':min(workers, len(plan['training_seeds'])),
             'contrast':'fixed iteration budgets on the same training trajectory; cumulative costs',
             'replication_unit':'training seed; checkpoints from one seed are paired, not independent',
             'scope':'same-target diagnostic; all predeclared checkpoints evaluated without selection'})
-        rows,costs=[],[]
-        for seed in plan['training_seeds']:
-            run=output/f'train-{seed}'
-            print(f'budget study: training seed {seed}',flush=True)
-            train(output/'target-source',run,replace(config,seed=seed),checkpoint_iterations=budgets[:-1])
-            with (run/'loss.csv').open() as stream:
-                log=list(csv.DictReader(stream))
-            for budget in budgets:
-                checkpoint=run/('checkpoint.pt' if budget==budgets[-1] else f'checkpoint-{budget}.pt')
-                saved=torch.load(checkpoint,weights_only=True,map_location='cpu')
-                updates=sum(int(r['rollout_steps']) for r in log[:budget])
-                costs.append(dict(training_seed=seed,budget=budget,rollout_updates=updates,
-                                  sample_updates=updates*config.batch_size,training_seconds=saved['training_seconds'],
-                                  checkpoint_sha256=hashlib.sha256(checkpoint.read_bytes()).hexdigest()))
-                write_json(output/'costs.json',costs)
-                metrics=evaluate(checkpoint,output/'target-source',output/f'eval-{seed}-{budget}',
-                                 horizons=plan['horizons'],seeds=plan['evaluation_seeds'])
-                rows.extend(dict(row,training_seed=seed,budget=budget) for row in metrics)
-                write_json(output/'rows.json',rows)
-        result=summarize_budgets(rows)
-        write_json(output/'summary.json',result)
-        write_json(output/'status.json',{'status':'complete'})
+        rows, costs, recovery_rows, errors = [], [], [], []
+        def collect(result):
+            new_rows, new_costs, new_recovery = result
+            rows.extend(new_rows); costs.extend(new_costs); recovery_rows.extend(new_recovery)
+            rows.sort(key=lambda r:(r['training_seed'],r['budget'],r['seed'],r['step']))
+            costs.sort(key=lambda r:(r['training_seed'],r['budget']))
+            recovery_rows.sort(key=lambda r:(r['training_seed'],r['budget'],r['geometry'],r['seed'],r['fraction']))
+            write_json(output/'rows.json', rows)
+            write_json(output/'costs.json', costs)
+            if 'recovery' in plan:
+                write_json(output/'recovery-rows.json', recovery_rows)
+        if workers == 1:
+            for seed in plan['training_seeds']:
+                collect(_run_budget_seed(output, config, seed, budgets, plan))
+        else:
+            with ProcessPoolExecutor(max_workers=min(workers,len(plan['training_seeds'])),
+                                     mp_context=multiprocessing.get_context('spawn')) as executor:
+                futures = {executor.submit(_run_budget_seed,output,config,seed,budgets,plan):seed for seed in plan['training_seeds']}
+                for future in as_completed(futures):
+                    try:
+                        collect(future.result())
+                    except Exception as exc:
+                        errors.append(dict(training_seed=futures[future],error=str(exc)))
+                        write_json(output/'errors.json', errors)
+            if errors:
+                raise RuntimeError('one or more training seeds failed; see errors.json')
+        result = summarize_budgets(rows)
+        write_json(output/'summary.json', result)
+        if 'recovery' in plan:
+            write_json(output/'recovery-summary.json', summarize_budget_recovery(recovery_rows))
+        write_json(output/'status.json', {'status':'complete'})
         return result
     except BaseException as exc:
-        write_json(output/'status.json',{'status':'failed','error':str(exc)})
+        write_json(output/'status.json', {'status':'failed','error':str(exc)})
         raise

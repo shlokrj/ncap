@@ -140,5 +140,6 @@ def budget_main():
     parser.add_argument('--target', required=True, type=Path)
     parser.add_argument('--plan', required=True, type=Path)
     parser.add_argument('--output', required=True, type=Path)
+    parser.add_argument('--workers', type=int, default=1)
     args = parser.parse_args()
-    print(json.dumps(run_budget_study(args.target, args.output, json.loads(args.plan.read_text())), indent=2))
+    print(json.dumps(run_budget_study(args.target, args.output, json.loads(args.plan.read_text()), workers=args.workers), indent=2))

@@ -70,3 +70,69 @@ def test_invalid_checkpoint_schedule_is_rejected_before_writing(tmp_path,points)
     with pytest.raises(ValueError):
         train(tmp_path/'missing.png',tmp_path/'run',config(),checkpoint_iterations=points)
     assert not (tmp_path/'run').exists()
+
+
+def test_parallel_recovery_matches_serial(tmp_path):
+    target=tmp_path/'target.png'; Image.new('RGBA',(1,1),(0,150,0,255)).save(target)
+    plan=dict(training=asdict(config()),training_seeds=[0,1],evaluation_seeds=[10],
+              horizons=[3,8],budgets=[3,6],
+              recovery=dict(grow_steps=3,recovery_steps=4,fractions=[0,.5,1],geometries=['dropout','center']))
+    run_budget_study(target,tmp_path/'serial',plan)
+    run_budget_study(target,tmp_path/'parallel',plan,workers=2)
+    for name in ['rows.json','summary.json','recovery-rows.json','recovery-summary.json']:
+        assert json.loads((tmp_path/'serial'/name).read_text())==json.loads((tmp_path/'parallel'/name).read_text())
+    rows=json.loads((tmp_path/'parallel/recovery-rows.json').read_text())
+    assert len(rows)==24
+    assert all(r['recovered_loss']==r['control_loss'] for r in rows if r['fraction']==0)
+    assert all(r['recovered_loss']==r['damaged_loss'] for r in rows if r['fraction']==1)
+
+
+def test_recovery_summary_pairs_training_seeds():
+    from ncap.budget_study import summarize_budget_recovery
+    rows=[]
+    for seed,count,value in [(0,1,2),(1,3,6)]:
+        for _ in range(count):
+            for budget in [3,6]:
+                v=value if budget==3 else value/2
+                rows.append(dict(training_seed=seed,budget=budget,geometry='dropout',fraction=.5,
+                                 grown_loss=v,damaged_loss=v,recovered_loss=v,control_loss=v))
+    row=next(r for r in summarize_budget_recovery(rows) if r['budget']==6 and r['metric']=='recovered_loss')
+    assert row['mean']==2
+    assert row['paired_delta_mean']==-2
+
+
+def test_invalid_recovery_plan_fails_before_writing(tmp_path):
+    plan=dict(training=asdict(config()),training_seeds=[0],evaluation_seeds=[10],horizons=[8],budgets=[3,6],
+              recovery=dict(grow_steps=3,recovery_steps=4,fractions=[.5],geometries=['unknown']))
+    with pytest.raises(ValueError,match='geometries'):
+        run_budget_study(tmp_path/'missing.png',tmp_path/'study',plan)
+    assert not (tmp_path/'study').exists()
+
+
+def test_parallel_failure_preserves_other_results(tmp_path, monkeypatch):
+    from concurrent.futures import Future
+    from ncap import budget_study
+    class Executor:
+        def __init__(self, **kwargs):
+            pass
+        def __enter__(self):
+            return self
+        def __exit__(self, *args):
+            pass
+        def submit(self, function, output, cfg, seed, budgets, plan):
+            future=Future()
+            if seed==0:
+                future.set_exception(RuntimeError('seed failed'))
+            else:
+                future.set_result(([dict(training_seed=seed,budget=6,seed=10,step=8,loss=.1)],[],[]))
+            return future
+    monkeypatch.setattr(budget_study,'ProcessPoolExecutor',Executor)
+    target=tmp_path/'target.png'; Image.new('RGBA',(1,1),(0,150,0,255)).save(target)
+    plan=dict(training=asdict(config()),training_seeds=[0,1],evaluation_seeds=[10],horizons=[8],budgets=[3,6])
+    out=tmp_path/'study'
+    with pytest.raises(RuntimeError,match='training seeds failed'):
+        run_budget_study(target,out,plan,workers=2)
+    assert json.loads((out/'status.json').read_text())['status']=='failed'
+    assert json.loads((out/'errors.json').read_text())[0]['training_seed']==0
+    assert json.loads((out/'rows.json').read_text())[0]['training_seed']==1
+    assert not (out/'summary.json').exists()

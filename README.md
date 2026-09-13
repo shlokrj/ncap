@@ -53,9 +53,9 @@ Other experiments:
 | `ncap-horizons` | Compare training rollout lengths |
 | `ncap-bounds` | Test cell-state limits |
 | `ncap-objective` | Compare training penalties |
-| `ncap-budgets` | Compare training budgets |
+| `ncap-budgets` | Compare training budgets and recovery |
 
-Plans are in `configs/`. Run any command with `--help` for options.
+Plans are in `configs/`. The larger budget comparison uses `configs/extended-budget-study.json`; `--workers 3` runs its three training seeds in parallel. Run any command with `--help` for options.
 
 ## Tests
 
