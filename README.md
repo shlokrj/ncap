@@ -2,7 +2,7 @@
 
 Neural Cellular Automata Playground. A PyTorch project that learns to grow images and recover from damage.
 
-Includes training, simulation, and recovery experiments. The interactive playground is planned. Leaf experiments show early growth and partial recovery. Long-term stability still needs work.
+Includes training, simulation, and recovery experiments. The interactive playground is planned. Leaf and butterfly experiments show early growth and partial recovery. Long-term stability still needs work.
 
 ## Setup
 
@@ -27,6 +27,8 @@ ncap-simulate --checkpoint data/runs/leaf/checkpoint.pt \
 ```
 
 Outputs include a checkpoint, loss metrics, a final image, and a growth GIF. Use a new output directory for each run. Generated files stay under `data/` and are ignored by Git.
+
+An original butterfly target is also included at `assets/targets/butterfly.png`. Target generators are in `scripts/`.
 
 ## Experiments
 
