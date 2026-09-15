@@ -56,8 +56,11 @@ Other experiments:
 | `ncap-bounds` | Test cell-state limits |
 | `ncap-objective` | Compare training penalties |
 | `ncap-budgets` | Compare training budgets and recovery |
+| `ncap-report` | View every budget-study image and its metrics |
 
 Plans are in `configs/`. The larger budget comparison uses `configs/extended-budget-study.json`; `--workers 3` runs its three training seeds in parallel. Run any command with `--help` for options.
+
+Export a completed budget study with `ncap-report --study data/studies/my-study --output data/reports/my-study`, then open the new `index.html`.
 
 ## Tests
 

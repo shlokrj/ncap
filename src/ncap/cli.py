@@ -143,3 +143,12 @@ def budget_main():
     parser.add_argument('--workers', type=int, default=1)
     args = parser.parse_args()
     print(json.dumps(run_budget_study(args.target, args.output, json.loads(args.plan.read_text()), workers=args.workers), indent=2))
+
+
+def report_main():
+    from .report import export_budget_report
+    parser = argparse.ArgumentParser(description='Export all budget-study images with their measured results.')
+    parser.add_argument('--study', required=True, type=Path)
+    parser.add_argument('--output', required=True, type=Path)
+    args = parser.parse_args()
+    print(export_budget_report(args.study, args.output))
